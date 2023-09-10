@@ -2,71 +2,37 @@
 #include <stdlib.h>
 #include <malloc.h>
 #include <string.h>
-#include <stdbool.h> 
+#include <stdbool.h>
+#include <unistd.h>
+#define MAX_STATION 27000
 #define MAX_CAR_NUM 513
 #define INVALID -1
+#define IGNORE -2
 
 typedef struct {
     int distance;
+    int max_range;
     int* range;
 }Station;
 
 typedef struct {
     int distance;
     int max_range;
-    int furthest_next;
+    short furthest_next;
 }Station_list;
-
-FILE *file;
-char carattereInFile[2];
-char distance_string[10];
-char num_car_string[10];
-char range_string[10];
-char fileInput[2];
-char buffer[20];
 
 Station_list* path;
 Station* station;
 
+char command[18];
+char* buffer;
 int station_size = 1;
 int distance;
 int num_car;
+int lenght;
 int range;
 int start;
 int end;
-int lenght;
-
-/***************************************************************** PRINTERS ***********************************************************************/
-
-void print_path(){
-    for(int i = 0; i < lenght; i++){
-        printf("%d : ", i);
-        printf("DISTANCE = %d || MAX_RANGE = %d || FURTHEST_NEXT = %d\n", path[i].distance, path[i].max_range, path[i].furthest_next); 
-        if(path[i].distance == -1){
-            break;
-        }
-    }
-    printf("\n\n");
-}
-
-void print_station_distance(){
-    for(int i = 0; i < station_size; i++){
-        printf("%d -> ", station[i].distance);
-    }
-}
-
-void print_range(){
-    for(int i = 0; i < station_size-1; i++){
-        printf("%d : ", station[i].distance);
-        for(int j = 0; j < MAX_CAR_NUM; j++){
-            printf("%d ", station[i].range[j]);
-            if(station[i].range[j] == INVALID){
-                break;
-            }
-        }
-        printf("\n");
-    }
-}
 
 /**************************************************************** ALGORITHMS **********************************************************************/
 
@@ -79,10 +45,12 @@ void merge(Station_list arr[], int l, int m, int r){
   
     for (i = 0; i < n1; i++){
         L[i].distance = arr[l + i].distance;
+        L[i].max_range = arr[l + i].max_range;
     }
         
     for (j = 0; j < n2; j++){
         R[j].distance = arr[m + 1 + j].distance;
+        R[j].max_range = arr[m + 1 + j].max_range;
     }
 
     i = 0;
@@ -92,21 +60,25 @@ void merge(Station_list arr[], int l, int m, int r){
     while (i < n1 && j < n2) {
         if (L[i].distance <= R[j].distance) {
             arr[k].distance = L[i].distance;
+            arr[k].max_range = L[i].max_range;
             i++;
         }
         else {
             arr[k].distance = R[j].distance;
+            arr[k].max_range = R[j].max_range;
             j++;
         }
         k++;
     }
     while (i < n1) {
         arr[k].distance = L[i].distance;
+        arr[k].max_range = L[i].max_range;
         i++;
         k++;
     }
     while (j < n2) {
         arr[k].distance = R[j].distance;
+        arr[k].max_range = R[j].max_range;
         j++;
         k++;
     }
@@ -123,67 +95,61 @@ void mergeSort(Station_list arr[], int l, int r){
 
 void bfs_search(){
     // Contiene gli indici delle stazioni in path da controllare e controllate.
-    int* Queue = malloc(lenght*sizeof(int));
-    
+    int* Queue = malloc((lenght+1)*sizeof(int));
+    int current_queue = 0;
+    int last_queue = 0;
+
     // Ci dice se la stazione corrispondente in path è già stata visitata o no.
     // Esempio: path[n]     =>      Queue[current_queue] = n     =>      visited[n] = true;
-    bool* visited = malloc(lenght*sizeof(bool));
+    bool* visited = malloc((lenght+1)*sizeof(bool));
 
     // Salva la stazione "parente" di ogni stazione in Queue.
     // Esempio: Queue[current_queue] = n     =>      prev[current_queue] = prev_n.
-    int* prev = malloc(lenght*sizeof(int));
+    int* prev = malloc((lenght+1)*sizeof(int));
     
-    int* final_path = malloc(lenght*sizeof(int));
+    int* final_path = malloc(lenght+1*sizeof(int));
 
-    int current_queue = 0;
-    int last_queue = 0;
-    bool skip = false;
-
-    for(int i = 0; i < lenght; i++){
+    for(int i = 0; i <= lenght; i++){
         visited[i] = false;
     }
 
     Queue[0] = 0;
     prev[0] = 0;
 
-    while(Queue[last_queue] != lenght-1){
-        for(int i = Queue[current_queue]+1; i <= path[Queue[current_queue]].furthest_next ; i++){
+    while(Queue[last_queue] != lenght){
+        
+        if(path[Queue[current_queue]].furthest_next != Queue[current_queue]){
 
-            if(!visited[i]){
-                
-                last_queue++;
-                Queue[last_queue] = i;
-                visited[i] = true;
-                prev[last_queue] = Queue[current_queue];
-                if(Queue[last_queue] == lenght-1){
-                    skip = true;
-                    break;
+            int temp = path[Queue[current_queue]].furthest_next;
+            for(int i = Queue[current_queue]+1; i <= temp; i++){
+
+                if(!visited[i]){
+                    
+                    last_queue++;
+                    Queue[last_queue] = i;
+                    visited[i] = true;
+                    prev[last_queue] = Queue[current_queue];
+                    if(Queue[last_queue] == lenght){
+                        break;
+                    }
+
                 }
-
+                
             }
-            
+        }
+
+        if(current_queue == last_queue){
+            printf("nessun percorso\n");
+            return;
         }
 
         visited[Queue[current_queue]] = true;
         current_queue++;
-        if(skip){
-            break;
-        }
+        
     }
-
-    /**
-    for(int i = 0; i <= current_queue; i++){
-        printf("%d ->", Queue[i]);
-    }
-    printf("\n");
-    for(int i = 0; i <= current_queue; i++){
-        printf("%d ->", prev[i]);
-    }
-    printf("\n");
-    */
 
     int j = 0;
-    final_path[0] = lenght-1;
+    final_path[0] = lenght;
     for(int i = last_queue; i > 0; i--){
         if(Queue[i] == final_path[j]){
             j++;
@@ -192,165 +158,164 @@ void bfs_search(){
          
     }
     
-    /**
     for(int i = j; i > 0 ; i--){
-        printf("%d ->", final_path[i]);
-    }
-    */
-    
-    for(int i = j; i > 0 ; i--){
-        printf("%d ->", path[final_path[i]].distance);
+        printf("%d ", path[final_path[i]].distance);
     }           
     printf("%d\n", end);
-    
 }
 
 void bfs_search_inverted(){
-
+   
     // Contiene gli indici delle stazioni in path da controllare e controllate.
-    int* Queue = malloc(lenght*sizeof(int));
-    
-    // Ci dice se la stazione corrispondente in path è già stata visitata o no.
-    // Esempio: path[n]     =>      Queue[current_queue] = n     =>      visited[n] = true;
-    bool* visited = malloc(lenght*sizeof(bool));
-
-    // Salva la stazione "parente" di ogni stazione in Queue.
-    // Esempio: Queue[current_queue] = n     =>      prev[current_queue] = prev_n.
-    int* prev = malloc(lenght*sizeof(int));
-    
-    int* final_path = malloc(lenght*sizeof(int));
-
+    int* Queue = malloc((lenght+1)*sizeof(int));
     int current_queue = 0;
     int last_queue = 0;
+    
+    // Contine true se la stazione corrispondente in path è già stata visitata, false altrimenti.
+    // Esempio: path[n]     =>      Queue[current_queue] = n     =>      visited[n] = true;
+    bool* visited = malloc((lenght+1)*sizeof(bool));
+    
+    // Contiene gli indici di Queue che marcano la fine di un interavallo di hop. (Gli hop nell'algortimo BFS)
+    int* marker = malloc((lenght+1)*sizeof(int));
+    int current_marker = 0;
+    marker[current_marker] = 0;
 
-    for(int i = 0; i < lenght; i++){
+    // Contiene gli indici delle stazione del percorso finale.
+    int* final_path = malloc((lenght+1)*sizeof(int));
+    int current_final = 0;
+
+    for(int i = 0; i <= lenght; i++){
         visited[i] = false;
     }
 
-    Queue[0] = lenght-1;
-    prev[0] = 0;
+    Queue[0] = lenght;
+
+    int temp = 0;
 
     while(Queue[last_queue] != 0){
-        for(int i = 0; path[Queue[current_queue]].furthest_next + i < Queue[current_queue]; i++){
 
-            if(!visited[path[Queue[current_queue]].furthest_next + i]){
-                
-                last_queue++;
-                Queue[last_queue] = path[Queue[current_queue]].furthest_next + i;
-                visited[Queue[last_queue]] = true;
-                prev[last_queue] = Queue[current_queue];
-                if(Queue[last_queue] == 0){
-                    break;
+        if(path[Queue[current_queue]].furthest_next != Queue[current_queue]){
+
+            temp = path[Queue[current_queue]].furthest_next;
+
+            for(int i = Queue[current_queue]-1; i >= temp; i--){
+
+                if(!visited[i]){
+                    
+                    last_queue++;
+                    Queue[last_queue] = i;
+                    visited[Queue[last_queue]] = true;
+                    if(!Queue[last_queue]){
+                        break;
+                    }
+
                 }
-
-            }
             
+            }
+        
+        }
+
+        if(current_queue == last_queue){
+            printf("nessun percorso\n");
+            return;
+        }
+
+        if(current_queue == marker[current_marker] || Queue[last_queue] == 0){
+            current_marker++;
+            marker[current_marker] = last_queue;
         }
 
         visited[Queue[current_queue]] = true;
         current_queue++;
     }
 
-    /**
-    for(int i = 0; i <= current_queue; i++){
-        printf("%d ->", Queue[i]);
-    }
-    printf("\n");
-    for(int i = 0; i <= current_queue; i++){
-        printf("%d ->", prev[i]);
-    }
-    printf("\n");
-
-
-    */
-
-    int j = 0;
-    final_path[0] = prev[1];
-    for(int i = 1; i <= current_queue; i++){
-        if(final_path[j] != prev[i]){
-            j++;
-            final_path[j] = prev[i];
-            final_path[j+1] = INVALID;
-        }   
+    for(int i = 0; i < current_marker; i++){
+        temp = Queue[marker[i+1]];
+        for(int j = marker[i]+1; j <= marker[i+1]; j++){
+            if(path[Queue[j]].furthest_next > temp){
+                Queue[j] = IGNORE;
+            }
+        }
     }
     
-    /**
-    for(int i = 0; final_path[i] > 0 ; i++){
-        printf("%d ->", final_path[i]);
+    final_path[current_final] = path[0].distance;
+    for(int i = current_marker; i > 1; i--){
+
+        for(int j = marker[i-1]; j > marker[i-2]; j--){
+
+            if(Queue[j] != IGNORE && path[Queue[j]].furthest_next <= Queue[last_queue]){
+                current_final++;
+                final_path[current_final] = path[Queue[j]].distance;
+                last_queue = j;
+                break;
+            }
+
+        }
+
     }
-    */
-    
-    for(int i = 0; final_path[i] > 0 ; i++){
-        printf("%d ->", path[final_path[i]].distance);
-    }    
-    printf("%d \n", start);
+    current_final++;
+    final_path[current_final] = path[lenght].distance;
+
+    for(int i = current_final; i >= 0; i--){
+        printf("%d ", final_path[i]);
+    }
+    printf("\n");
 }
 
 /**************************************************************** FUNCTIONS **********************************************************************/
 
-void aggiungi_stazione(){
+int parse_num(){
 
-	memset(distance_string, 0, sizeof(char[10]));
-    while(fgets(carattereInFile, 2, file) != NULL){
-        if(strcmp(carattereInFile, " ") == 0 || strcmp(carattereInFile, "\n") == 0){
+    char temp[10];
+    for(int i = 0; i < 11; i++){
+        temp[i] = getchar_unlocked();
+        switch (temp[i])
+        {
+        case ' ':
+            return atoi(temp);
+        case '\n':
+            return atoi(temp);
+        default:
             break;
-        }else{
-            strcat(distance_string, carattereInFile);
         }
     }
-    distance = atoi(distance_string);
-	
-	memset(num_car_string, 0, sizeof(char[10]));
-	while(fgets(carattereInFile, 2, file) != NULL){
-        if(strcmp(carattereInFile, " ") == 0 || strcmp(carattereInFile, "\n") == 0){
-            break;
-        }else{
-            strcat(num_car_string, carattereInFile);
-        }
-    }
-    num_car = atoi(num_car_string);
+    return 0;
+}
 
-    for(int i = 0; i <  station_size; i++){
+void aggiungi_stazione(){ 
+    
+    getchar_unlocked();
+    distance = parse_num();
+    num_car = parse_num();
+
+    for(int i = 0; i < station_size; i++){
         if(station[i].distance == distance){
             printf("non aggiunta\n");
             return;
         }
     }
 
-    station_size++;
-    station = realloc(station, station_size*sizeof(Station));
-    station[station_size -1].distance = distance;
-    //station[station_size -1].range = calloc(num_car+1, sizeof(int));
-    station[station_size -1].range = calloc(MAX_CAR_NUM, sizeof(int));
-
-    for(int j = 0; j < num_car; j++){
-        memset(range_string, 0, sizeof(char[10]));
-        while(fgets(carattereInFile, 2, file) != NULL){
-            if(strcmp(carattereInFile, " ") == 0 || strcmp(carattereInFile, "\n") == 0){
-                break;
-            }else{
-                strcat(range_string, carattereInFile);
-            }
+    //station = realloc(station, station_size*sizeof(Station));
+    station[station_size].distance = distance;
+    station[station_size].max_range = 0;
+    station[station_size].range = calloc(num_car+1, sizeof(int));
+    //station[station_size].range = calloc(MAX_CAR_NUM, sizeof(int));
+    
+    int temp = 0;
+    for(int j = 0; j < num_car && scanf("%d", &station[station_size].range[j]) > 0; j++){
+        if(temp < station[station_size].range[j]){
+            station[station_size].max_range = station[station_size].range[j];
+            temp = station[station_size].range[j];
         }
-        range = atoi(range_string);
-        station[station_size -1].range[j] = range;
     }
-    station[station_size -1].range[num_car] = -1;
-    printf("aggiunta\n");        
-
+    station[station_size].range[num_car] = INVALID;
+    station_size++;
+    printf("aggiunta\n");     
 }
 
 void demolisci_stazione(){
-    
-    memset(distance_string, 0, sizeof(char[10]));
-    while(fgets(carattereInFile, 2, file) != NULL){
-        if(strcmp(carattereInFile, " ") == 0 || strcmp(carattereInFile, "\n") == 0){
-            break;
-        }else{
-            strcat(distance_string, carattereInFile);
-        }
-    }
-    distance = atoi(distance_string);
+
+    if(scanf("%d", &distance) > 0);
 
     for(int i=0; i < station_size; i++){
         if(station[i].distance == distance){
@@ -363,34 +328,29 @@ void demolisci_stazione(){
 }
 
 void aggiungi_auto(){
-    memset(distance_string, 0, sizeof(char[10]));
-    while(fgets(carattereInFile, 2, file) != NULL){
-        if(strcmp(carattereInFile, " ") == 0 || strcmp(carattereInFile, "\n") == 0){
-            break;
-        }else{
-            strcat(distance_string, carattereInFile);
-        }
-    }
-    distance = atoi(distance_string);
-	
-	memset(range_string, 0, sizeof(char[10]));
-	while(fgets(carattereInFile, 2, file) != NULL){
-        if(strcmp(carattereInFile, " ") == 0 || strcmp(carattereInFile, "\n") == 0){
-            break;
-        }else{
-            strcat(range_string, carattereInFile);
-        }
-    }
-    range = atoi(range_string);
+
+    if(scanf("%d", &distance) > 0 && scanf("%d", &range) > 0);
 
     for(int i = 0; i < station_size; i++){
         if(station[i].distance == distance){
             for (int j = 0; j < MAX_CAR_NUM; j++){
+                if(station[i].range[j] == IGNORE){
+                    station[i].range[j] = range;
+                    if(station[i].max_range < range){
+                        station[i].max_range = range;
+                    }
+                    printf("aggiunta\n"); 
+                    return;
+                }
                 if(station[i].range[j] == INVALID){
-                    //station[i].range = realloc(station[i].range, (j+2)*sizeof(int));
+                    station[i].range = realloc(station[i].range, (j+2)*sizeof(int));
                     station[i].range[j] = range;
                     station[i].range[j+1] = INVALID;
-                    break;
+                    if(station[i].max_range < range){
+                        station[i].max_range = range;
+                    }
+                    printf("aggiunta\n");
+                    return;
                 }
             }
             printf("aggiunta\n");
@@ -401,136 +361,80 @@ void aggiungi_auto(){
 }
 
 void rottama_auto(){
-    memset(distance_string, 0, sizeof(char[10]));
-    while(fgets(carattereInFile, 2, file) != NULL){
-        if(strcmp(carattereInFile, " ") == 0 || strcmp(carattereInFile, "\n") == 0){
-            break;
-        }else{
-            strcat(distance_string, carattereInFile);
-        }
-    }
-    distance = atoi(distance_string);
-	
-	memset(range_string, 0, sizeof(char[10]));
-	while(fgets(carattereInFile, 2, file) != NULL){
-        if(strcmp(carattereInFile, " ") == 0 || strcmp(carattereInFile, "\n") == 0){
-            break;
-        }else{
-            strcat(range_string, carattereInFile);
-        }
-    }
-    range = atoi(range_string);
+
+    if(scanf("%d", &distance) > 0 && scanf("%d", &range) > 0);
 
     for(int i = 0; i < station_size; i++){
-        if(station[i].distance ==  distance){
+        if(station[i].distance == distance){
+
+            if(station[i].max_range < range){
+                printf("non rottamata\n");
+                return;
+            }
+
             for(int j = 0; j < MAX_CAR_NUM; j++){
+                if(station[i].range[j] == INVALID){
+                    printf("non rottamata\n");
+                    return;
+                }
                 if(station[i].range[j] == range){
-                    for(int k = j; k < MAX_CAR_NUM; k++){
-                        station[i].range[k] = station[i].range[k+1];
-                        if(station[i].range[k] == INVALID){
-                            break;
+                    station[i].range[j] = IGNORE;
+                    int temp = 0;
+                    if(station[i].max_range == range){
+                        for(int k = 0; k < MAX_CAR_NUM; k++){
+                            if(station[i].range[k] == INVALID){
+                                station[i].max_range = temp;
+                                printf("rottamata\n");
+                                return;
+                            }
+                            if(temp < station[i].range[k]){
+                                temp = station[i].range[k];
+                            }
                         }
                     }
                     printf("rottamata\n");
                     return;
                 }
             }
-            break;
+
         }
     }
     printf("non rottamata\n");
 }
 
 void pianifica_percorso(){
-    memset(distance_string, 0, sizeof(char[10]));
-    while(fgets(carattereInFile, 2, file) != NULL){
-        if(strcmp(carattereInFile, " ") == 0 || strcmp(carattereInFile, "\n") == 0){
-            break;
-        }else{
-            strcat(distance_string, carattereInFile);
-        }
-    }
-    start = atoi(distance_string);
 
-    memset(distance_string, 0, sizeof(char[10]));
-    while(fgets(carattereInFile, 2, file) != NULL){
-        if(strcmp(carattereInFile, " ") == 0 || strcmp(carattereInFile, "\n") == 0){
-            break;
-        }else{
-            strcat(distance_string, carattereInFile);
-        }
+    if(scanf("%d", &start) > 0 && scanf("%d", &end) > 0);
+
+    if(start == end){
+        printf("start\n");
+        return;
     }
-    end = atoi(distance_string);
-    
-    if(lenght == 0){
-        path = malloc(station_size*sizeof(Station_list));
-    }else{
-        path = realloc(path ,station_size*sizeof(Station_list));
-    }
-    
-    bool inverted = false;
+ 
+    path = realloc(path ,station_size*sizeof(Station_list));
+
     lenght = 0;
 
     if(start < end){
 
         // Inserisco tutte le stationi con distanze tra "start" ed "end" nell'array "path" che avrà lunghezza "lenght".
         for(int i = 0; i < station_size; i++){
-
             if(station[i].distance <= end && station[i].distance >= start && station[i].distance != INVALID){
-                
                 path[lenght].distance = station[i].distance;
+                path[lenght].max_range = station[i].max_range;
                 lenght++;
-                //path = realloc(path, (lenght + 1)*sizeof(Station_list));
-
             }
-
         }
+
+        lenght--;
         
         // Faccio un mergeSort sull'array path per ordinare le stazioni dalla meno distante alla più distante.
-        mergeSort(path, 0, lenght-1);
-
-        // Inserisco il max range delle auto nelle stationi della lista di stazioni "path".
-        for(int i = 0; i < lenght; i++){
-            for(int j = 0; j < station_size; j++){
-                if(path[i].distance == station[j].distance){
-                    path[i].max_range = 0;
-                    for(int k = 0; k < MAX_CAR_NUM; k++){
-                        if(path[i].max_range < station[j].range[k]){
-                            path[i].max_range = station[j].range[k];
-                        }
-                        if(station[j].range[k] == INVALID){
-                            break;
-                        }
-                    }
-                    break;
-                }
-            }
-        }
-
-        // Cancello le stazioni che non possono raggiungere almeno una stazione successiva (da start a end). 
-        for(int i = 0; i < lenght - 1; i++){
-            if(path[i].distance == INVALID){
-                break;
-            }
-            if((path[i+1].distance - path[i].distance) > path[i].max_range){
-                
-                for(int j = i; j < lenght; j++){
-                    if(j == lenght - 1){
-                        path[lenght -1].distance = INVALID;
-                        lenght--;
-                        break;
-                    }
-                    path[j].distance = path[j+1].distance;
-                    path[j].max_range = path[j+1].max_range;
-                }
-
-                i--;
-            } 
-        }
-
+        mergeSort(path, 0, lenght);
+        
         // Trovo la prossima stazione più lontana raggiungibile da ciascuna stazione
-        for(int i = 0; i < lenght; i++){
-            for(int j = i+1; j < lenght; j++){
+        for(int i = 0; i <= lenght; i++){
+            path[i].furthest_next = i;
+            for(int j = i+1; j <= lenght; j++){
                 if((path[j].distance - path[i].distance) <= path[i].max_range){
                     path[i].furthest_next = j;
                 }
@@ -539,10 +443,13 @@ void pianifica_percorso(){
                 }
             }
         }
+        path[lenght].furthest_next = INVALID;
 
-    }else if(start > end){
+        bfs_search();
+        return;
 
-        inverted = true;
+    }else{
+
         int temp = start;
         start = end;
         end = temp;
@@ -551,161 +458,89 @@ void pianifica_percorso(){
         for(int i = 0; i < station_size; i++){
 
             if(station[i].distance <= end && station[i].distance >= start && station[i].distance != INVALID){
-                
                 path[lenght].distance = station[i].distance;
+                path[lenght].max_range = station[i].max_range;
                 lenght++;
-                path = realloc(path, (lenght + 1)*sizeof(Station_list));
-
             }
 
         }
+
+        lenght--;
         
         // Faccio un mergeSort sull'array path per ordinare le stazioni dalla meno distante alla più distante.
-        mergeSort(path, 0, lenght-1);
+        mergeSort(path, 0, lenght);
 
-        // Inserisco il max range delle auto nelle stationi della lista di stazioni "path".
-        for(int i = 0; i < lenght; i++){
-            for(int j = 0; j < station_size; j++){
-                if(path[i].distance == station[j].distance){
-                    path[i].max_range = 0;
-                    for(int k = 0; k < MAX_CAR_NUM; k++){
-                        if(path[i].max_range < station[j].range[k]){
-                            path[i].max_range = station[j].range[k];
-                        }
-                        if(station[j].range[k] == INVALID){
-                            break;
-                        }
-                    }
-                    break;
-                }
-            }
-        }
-
-        // Cancello le stazioni che non possono raggiungere almeno una stazione successiva (da end a start). 
-        for(int i = (lenght-1); i > 0; i--){
-            
-            if(path[i].distance == INVALID){
-                break;
-            }
-            if((path[i].distance - path[i-1].distance) > path[i].max_range){
-                for(int j = i; j < lenght; j++){
-                    if(j == lenght - 1){
-                        path[lenght -1].distance = INVALID;
-                        lenght--;
-                        break;
-                    }
-                    path[j].distance = path[j+1].distance;
-                    path[j].max_range = path[j+1].max_range;
-                }
-                i++;
-            }
-             
-        }
-        
         // Trovo la prossima stazione più lontana raggiungibile da ciascuna stazione
-        for(int i = lenght -1; i >= 0; i--){
+        for(int i = lenght; i >= 0; i--){
+            path[i].furthest_next = i;
             for(int j = i-1; j >= 0; j--){
+
                 if((path[i].distance - path[j].distance) <= path[i].max_range){
                     path[i].furthest_next = j;
                 }
                 if((path[i].distance - path[j].distance) > path[i].max_range){
                     break;
                 }
+
             }
         }
+        path[0].furthest_next = 0;
 
-    }
-
-    if(start == end){
-        printf("start\n");
+        bfs_search_inverted();
         return;
     }
-
-    if(path[0].distance != start || path[lenght-1].distance != end){
-        printf("nessun percorso\n");
-    }else{
-        if(inverted){
-            bfs_search_inverted();
-        }else{ 
-            bfs_search();
-        }
-    }
-
-    // Cancello tutti i valori proesenti nell'array path (INVALID = -1).
-    for(int i = 0; i < lenght; i++){
-        path[i].distance = INVALID;
-    }
-
-    // CHECK PRINTERS
-    /*************************
-     * print_path();     
-     * 
-    */  
-
 }
 
 /****************************************************************** MAIN **************************************************************************/
 
-int main(int argc, char *argv[]){ 
-
-    station = malloc(sizeof(Station));
+int main(int argc, char *argv[]){
+    
+    station = malloc(MAX_STATION*sizeof(Station));
     station[0].range = malloc(sizeof(int));
     station[0].distance = INVALID;
     station[0].range[0] = INVALID;
 
-    path = malloc(2*sizeof(Station_list)); 
+    path = malloc(2*sizeof(Station_list));
 
-    file = fopen("open_104.txt", "r");
-    if(NULL == file){
-        perror("error when opening file!");
-        return INVALID;
-    }	
+    command[0] = '0';
+    while(command[0] != EOF){
 
-	while(fgets(fileInput, 2, file) != NULL) {	
-
-        switch (fileInput[0]){
-
+        command[0] = getchar_unlocked();
+        switch (command[0])
+        {
         case 'a':
-    
-            if(fgets(buffer, 9, file) != NULL){
-                if(fgets(fileInput, 2, file) != NULL){
-                    if(strcmp(fileInput, "s") == 0 ){
-                
-                        if(fgets(buffer, 9, file) != NULL){
-                            aggiungi_stazione();
-                        }
-                                                    
-                    }else{
 
-                        if(fgets(buffer, 5, file) != NULL){
-                            aggiungi_auto();
-                        }
-                        
-
-                    }
-                }
+            if(fgets(command, 10, stdin) != NULL);
+            switch (command[8])
+            {
+            case 's':
+                if(fgets(command, 8, stdin) != NULL);
+                aggiungi_stazione();
+                break;
+            
+            default:
+                if(fgets(command, 4, stdin) != NULL);
+                aggiungi_auto();
+                break;
             }
             break;
-
+            
         case 'd':
 
-            if(fgets(buffer, 19, file) != NULL){
-                demolisci_stazione();
-            }
+            if(fgets(command, 18, stdin) != NULL);
+            demolisci_stazione();
             break;
 
         case 'r':
-            
-            if(fgets(buffer, 13, file) != NULL){
-                rottama_auto();
-            }
+
+            if(fgets(command, 12, stdin) != NULL);
+            rottama_auto();
             break;
 
         case 'p':
             
-            if(fgets(buffer, 19, file) != NULL){
-                pianifica_percorso();
-            }
+            if(fgets(command, 18, stdin) != NULL);
+            pianifica_percorso();
             break;        
 
         default:
@@ -714,12 +549,5 @@ int main(int argc, char *argv[]){
 
     }
 
-    // CHECK PRINTERS
-    /*************************
-     * print_range();    
-     * 
-    */ 
-
-    fclose(file);
     return 0;
 }
